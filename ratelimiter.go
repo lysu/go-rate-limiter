@@ -22,6 +22,19 @@ type MemoryLimiterConfig struct {
 	MaxInternal    int
 }
 
+func setTimeout(f func(), interval time.Duration) *time.Timer {
+	timer := time.NewTimer(interval)
+	go func() {
+		<-timer.C
+		f()
+	}()
+	return timer
+}
+
+func clearTimeout(timer *time.Timer) {
+	timer.Stop()
+}
+
 // MemoryLimiterCreate use to create a limiter
 func MemoryLimiterCreate(cfg MemoryLimiterConfig) CreateLimiter {
 	return func() Allow {
@@ -45,11 +58,26 @@ func MemoryLimiterCreate(cfg MemoryLimiterConfig) CreateLimiter {
 
 			floodReq := cfg.FloodThreshold && tooManyInInterval && (len(userSet) >= (3 * cfg.MaxInternal))
 
-			timeSinceLastReq := now - last(userSet)
+			timeSinceLastReq := takeTimeSinceLastReq(cfg, userSet)
+
+			if floodReq != "" {
+				floodCache.Put(id, "x")
+			}
 
 			return false
 		}
 	}
+}
+
+func takeTimeSinceLastReq(cfg MemoryLimiterConfig, userSet map[int64]struct{}) int64 {
+	if cfg.MinDifference == 0 || len(userSet) == 0 {
+		return int64(0)
+	}
+	return now - last(userSet)
+}
+
+func last(set map[int64]struct{}) int64 {
+	return int64(0)
 }
 
 func takeUserSet(storage map[string]map[int64]struct{}, key string, before int64) map[int64]struct{} {
