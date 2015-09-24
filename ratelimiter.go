@@ -58,10 +58,10 @@ func MemoryLimiterCreate(cfg MemoryLimiterConfig) CreateLimiter {
 
 			floodReq := cfg.FloodThreshold && tooManyInInterval && (len(userSet) >= (3 * cfg.MaxInternal))
 
-			timeSinceLastReq := takeTimeSinceLastReq(cfg, userSet)
+			timeSinceLastReq := takeTimeSinceLastReq(cfg, userSet, now)
 
-			if floodReq != "" {
-				floodCache.Put(id, "x")
+			if floodReq {
+				floodCache.Set(key, "xx")
 			}
 
 			return false
@@ -69,7 +69,7 @@ func MemoryLimiterCreate(cfg MemoryLimiterConfig) CreateLimiter {
 	}
 }
 
-func takeTimeSinceLastReq(cfg MemoryLimiterConfig, userSet map[int64]struct{}) int64 {
+func takeTimeSinceLastReq(cfg MemoryLimiterConfig, userSet map[int64]struct{}, now int64) int64 {
 	if cfg.MinDifference == 0 || len(userSet) == 0 {
 		return int64(0)
 	}
