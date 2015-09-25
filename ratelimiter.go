@@ -31,7 +31,7 @@ type CreateLimiter func() Allow
 type LimiterConfig struct {
 	FloodThreshold int
 	Interval       time.Duration
-	MinPeriod      int
+	MinPeriod      time.Duration
 	MaxInInterval  int
 	RedisPool      *redis.Pool
 }
@@ -89,7 +89,7 @@ func MemoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
 				firstReq = inIntervalReqs[0]
 			}
 
-			result := keepLimitTime(now, firstReq, tooManyInInterval, lastReqPeriod, cfg.MinPeriod, cfg.Interval)
+			waitOpenTime := waitOpenTime(now, firstReq, tooManyInInterval, lastReqPeriod, cfg.MinPeriod, cfg.Interval)
 
 			user, ok := requestRecords[id]
 			if !ok {
@@ -102,7 +102,7 @@ func MemoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
 				delete(requestRecords, id)
 			}, cfg.Interval)
 
-			return result <= 0
+			return waitOpenTime <= 0
 		}
 	}
 }
@@ -137,9 +137,9 @@ func RedisLimiterCreate(cfg LimiterConfig) CreateLimiter {
 				lastReqPeriod = now - lastReqPeriod
 			}
 
-			keepLimitTime := keepLimitTime(now, firstReq, tooManyInInterval, lastReqPeriod, cfg.MinPeriod, cfg.Interval)
+			waitOpenTime := waitOpenTime(now, firstReq, tooManyInInterval, lastReqPeriod, cfg.MinPeriod, cfg.Interval)
 
-			return keepLimitTime <= 0
+			return waitOpenTime <= 0
 		}
 	}
 }
@@ -203,10 +203,6 @@ func setTimeout(f func(), interval time.Duration) *time.Timer {
 	return timer
 }
 
-func mills2Nanos(m int64) int64 {
-	return 1000000 * m
-}
-
 func nanos2Mills(n int64) int64 {
 	return n / 1000000
 }
@@ -222,12 +218,12 @@ func parseFirst(ss []string) (int64, error) {
 	return num, nil
 }
 
-func keepLimitTime(now, firstReq int64, tooManyInInterval bool, timeSincelastReq int64, minPeriod int, interval time.Duration) int64 {
-	if tooManyInInterval || ((minPeriod > 0 && timeSincelastReq > 0) && (timeSincelastReq < mills2Nanos(int64(minPeriod)))) {
+func waitOpenTime(now, firstReq int64, tooManyInInterval bool, timeSincelastReq int64, minPeriod, interval time.Duration) int64 {
+	if tooManyInInterval || ((minPeriod > 0 && timeSincelastReq > 0) && (timeSincelastReq < minPeriod.Nanoseconds())) {
 		intervalLimitKeepTime := nanos2Mills((firstReq - now) + interval.Nanoseconds())
 		var periodLimitKeepTime int64
 		if minPeriod > 0 {
-			periodLimitKeepTime = int64(minPeriod) - nanos2Mills(int64(timeSincelastReq))
+			periodLimitKeepTime = nanos2Mills(minPeriod.Nanoseconds() - timeSincelastReq)
 		} else {
 			periodLimitKeepTime = math.MaxInt64
 		}
@@ -239,7 +235,7 @@ func keepLimitTime(now, firstReq int64, tooManyInInterval bool, timeSincelastReq
 	return 0
 }
 
-func lastRequestPeriod(minPeriod int, userSet []int64, now int64) int64 {
+func lastRequestPeriod(minPeriod time.Duration, userSet []int64, now int64) int64 {
 	if minPeriod == 0 || len(userSet) == 0 {
 		return int64(0)
 	}
