@@ -1,0 +1,14 @@
+*.swp
+.DS_Store
+.godeps/
+.idea/
+.DS_Store/
+logs/
+
+\#*#
+auto-save-list
+\#*
+*~
+.#*
+\#*\#
+.emacs.desktop
