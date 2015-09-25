@@ -127,14 +127,14 @@ func RedisLimiterCreate(cfg LimiterConfig) CreateLimiter {
 
 			tooManyInInterval := total >= cfg.MaxInInterval
 
-			isFlooded := cfg.FloodThreshold > 0 && tooManyInInterval && (total > (cfg.FloodThreshold * cfg.MaxInInterval))
+			isFlooded := cfg.FloodThreshold > 0 && tooManyInInterval && (total >= (cfg.FloodThreshold * cfg.MaxInInterval))
 			if isFlooded {
 				floodFlags.Set(id, "xx")
 			}
 
 			var lastReqPeriod int64
 			if cfg.MinPeriod > 0 && lastReq > 0 {
-				lastReqPeriod = now - lastReqPeriod
+				lastReqPeriod = now - lastReq
 			}
 
 			waitOpenTime := waitOpenTime(now, firstReq, tooManyInInterval, lastReqPeriod, cfg.MinPeriod, cfg.Interval)

@@ -25,6 +25,24 @@ var redisPool = &redis.Pool{
 	},
 }
 
+func clearUpRedis() {
+	conn := redisPool.Get()
+	defer conn.Close()
+	conn.Do("DEL", "rl-key1")
+	conn.Do("DEL", "rl-key2")
+}
+
+func size(key string) int {
+	conn := redisPool.Get()
+	defer conn.Close()
+	r, err := conn.Do("ZCARD", key)
+	if err != nil {
+		panic("fetch size failure")
+	}
+	ri, _ := redis.Int(r, err)
+	return ri
+}
+
 func assertRateLimiter(r func(key string) bool, t *testing.T) {
 	assert := assert.New(t)
 
@@ -72,7 +90,32 @@ func TestMemoryLimiter(t *testing.T) {
 }
 
 func TestRedisLimiter(t *testing.T) {
+	clearUpRedis()
 	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MaxInInterval: 10})
 	rr := rf()
 	assertRateLimiter(rr, t)
+	assert.Equal(t, 100, size("rl-key1"))
+}
+
+func TestFloodThreshold(t *testing.T) {
+	clearUpRedis()
+	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MaxInInterval: 10, FloodThreshold: 5})
+	rr := rf()
+	assertRateLimiter(rr, t)
+	assert.Equal(t, 51, size("rl-key1"))
+	time.Sleep(1500 * time.Millisecond)
+	assertRateLimiter(rr, t)
+}
+
+func TestMinPeriod(t *testing.T) {
+	clearUpRedis()
+	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MinPeriod: 10 * time.Millisecond, MaxInInterval: 10, FloodThreshold: 5})
+	allow := rf()
+	assert.True(t, allow("key1"))
+	assert.False(t, allow("key1"))
+	assert.True(t, allow("key2"))
+	time.Sleep(15 * time.Millisecond)
+	assert.True(t, allow("key1"))
+	assert.False(t, allow("key1"))
+	assert.True(t, allow("key2"))
 }
