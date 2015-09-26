@@ -29,6 +29,7 @@ type CreateLimiter func() Allow
 
 // LimiterConfig use to config redis limiter
 type LimiterConfig struct {
+	LimiterType    LimiterType
 	FloodThreshold int
 	Interval       time.Duration
 	MinPeriod      time.Duration
@@ -36,13 +37,61 @@ type LimiterConfig struct {
 	RedisPool      *redis.Pool
 }
 
+func defaultConfig() LimiterConfig {
+	return LimiterConfig{Interval: 1000 * time.Millisecond}
+}
+
+// UseMemory option control use memory base limiter
+func UseMemory() func(config *LimiterConfig) {
+	return func(config *LimiterConfig) {
+		config.LimiterType = Memory
+	}
+}
+
+// UseRedis option control use redis base limiter
+// redisPool supply redis config now we use redigo
+func UseRedis(redisPool *redis.Pool) func(config *LimiterConfig) {
+	return func(config *LimiterConfig) {
+		config.LimiterType = Redis
+		config.RedisPool = redisPool
+	}
+}
+
+// FloodThreshold protect backend when flood-like request came
+// The rate limiter will still add the request to backend storage even if the requests are too many.
+// It may consume too much memory in backend storage, so this option for it
+func FloodThreshold(floodThreshold int) func(config *LimiterConfig) {
+	return func(config *LimiterConfig) {
+		config.FloodThreshold = floodThreshold
+	}
+}
+
+// MinPeriod control the min period between two requests
+func MinPeriod(minPeriod time.Duration) func(config *LimiterConfig) {
+	return func(config *LimiterConfig) {
+		config.MinPeriod = minPeriod
+	}
+}
+
+// BucketLimit control use BucketToken limit logic
+func BucketLimit(interval time.Duration, maxInInterval int) func(config *LimiterConfig) {
+	return func(config *LimiterConfig) {
+		config.Interval = interval
+		config.MaxInInterval = maxInInterval
+	}
+}
+
 // RateLimiter is use-entry of RateLimiter
-func RateLimiter(limiterType LimiterType, config LimiterConfig) CreateLimiter {
-	switch limiterType {
+func RateLimiter(optfs ...func(config *LimiterConfig)) CreateLimiter {
+	cfg := defaultConfig()
+	for _, optf := range optfs {
+		optf(&cfg)
+	}
+	switch cfg.LimiterType {
 	case Redis:
-		return RedisLimiterCreate(config)
+		return redisLimiterCreate(cfg)
 	case Memory:
-		return MemoryLimiterCreate(config)
+		return memoryLimiterCreate(cfg)
 	}
 	return func() Allow {
 		return func(key string) bool {
@@ -51,8 +100,8 @@ func RateLimiter(limiterType LimiterType, config LimiterConfig) CreateLimiter {
 	}
 }
 
-// MemoryLimiterCreate use to create a limiter base on memory
-func MemoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
+// memoryLimiterCreate use to create a limiter base on memory
+func memoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
 	return func() Allow {
 		floodFlags := ttlcache.NewCache(cfg.Interval)
 		timeoutTimers := make(map[string]*time.Timer)
@@ -107,8 +156,8 @@ func MemoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
 	}
 }
 
-// RedisLimiterCreate use to create limiter base on redis
-func RedisLimiterCreate(cfg LimiterConfig) CreateLimiter {
+// redisLimiterCreate use to create limiter base on redis
+func redisLimiterCreate(cfg LimiterConfig) CreateLimiter {
 	return func() Allow {
 		floodFlags := ttlcache.NewCache(cfg.Interval)
 		return func(id string) bool {
@@ -120,18 +169,16 @@ func RedisLimiterCreate(cfg LimiterConfig) CreateLimiter {
 			key := fmt.Sprintf("%s-%s", "rl", id)
 			before := now - cfg.Interval.Nanoseconds()
 
-			total, firstReq, lastReq, err := CheckRedis(cfg.RedisPool, key, before, now, cfg.Interval)
+			total, firstReq, lastReq, err := checkRedis(cfg.RedisPool, key, before, now, cfg.Interval)
 			if err != nil {
 				return true
 			}
-
 			tooManyInInterval := total >= cfg.MaxInInterval
 
 			isFlooded := cfg.FloodThreshold > 0 && tooManyInInterval && (total >= (cfg.FloodThreshold * cfg.MaxInInterval))
 			if isFlooded {
 				floodFlags.Set(id, "xx")
 			}
-
 			var lastReqPeriod int64
 			if cfg.MinPeriod > 0 && lastReq > 0 {
 				lastReqPeriod = now - lastReq
@@ -144,8 +191,8 @@ func RedisLimiterCreate(cfg LimiterConfig) CreateLimiter {
 	}
 }
 
-// CheckRedis check status and add current ts to redis
-func CheckRedis(redisPool *redis.Pool, key string, before, now int64, interval time.Duration) (int, int64, int64, error) {
+// checkRedis check status and add current ts to redis
+func checkRedis(redisPool *redis.Pool, key string, before, now int64, interval time.Duration) (int, int64, int64, error) {
 	c := redisPool.Get()
 	defer func() {
 		if c != nil {

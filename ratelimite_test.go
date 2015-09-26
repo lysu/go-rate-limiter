@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/garyburd/redigo/redis"
-	"github.com/lysu/go-rate-limiter"
+	limiter "github.com/lysu/go-rate-limiter"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,14 +84,14 @@ func assertRateLimiter(r func(key string) bool, t *testing.T) {
 }
 
 func TestMemoryLimiter(t *testing.T) {
-	rf := ratelimiter.MemoryLimiterCreate(ratelimiter.LimiterConfig{Interval: 1000 * time.Millisecond, MaxInInterval: 10})
+	rf := limiter.RateLimiter(limiter.UseMemory(), limiter.BucketLimit(1000*time.Millisecond, 10))
 	mr := rf()
 	assertRateLimiter(mr, t)
 }
 
 func TestRedisLimiter(t *testing.T) {
 	clearUpRedis()
-	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MaxInInterval: 10})
+	rf := limiter.RateLimiter(limiter.UseRedis(redisPool), limiter.BucketLimit(1000*time.Millisecond, 10))
 	rr := rf()
 	assertRateLimiter(rr, t)
 	assert.Equal(t, 100, size("rl-key1"))
@@ -99,7 +99,7 @@ func TestRedisLimiter(t *testing.T) {
 
 func TestFloodThreshold(t *testing.T) {
 	clearUpRedis()
-	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MaxInInterval: 10, FloodThreshold: 5})
+	rf := limiter.RateLimiter(limiter.UseRedis(redisPool), limiter.BucketLimit(1000*time.Millisecond, 10), limiter.FloodThreshold(5))
 	rr := rf()
 	assertRateLimiter(rr, t)
 	assert.Equal(t, 51, size("rl-key1"))
@@ -109,7 +109,7 @@ func TestFloodThreshold(t *testing.T) {
 
 func TestMinPeriod(t *testing.T) {
 	clearUpRedis()
-	rf := ratelimiter.RedisLimiterCreate(ratelimiter.LimiterConfig{RedisPool: redisPool, Interval: 1000 * time.Millisecond, MinPeriod: 10 * time.Millisecond, MaxInInterval: 10, FloodThreshold: 5})
+	rf := limiter.RateLimiter(limiter.UseRedis(redisPool), limiter.MinPeriod(10*time.Millisecond))
 	allow := rf()
 	assert.True(t, allow("key1"))
 	assert.False(t, allow("key1"))
