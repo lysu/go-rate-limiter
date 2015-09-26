@@ -59,4 +59,8 @@ The rate limiter will still add the request to backend storage even if the reque
 
 If you set `FloodThreshold`,when current requests number in storage is greater or equalt to `FloodThreshold * MaxInInterval`, then the limiter will not add the new request to backend storage until next time window.
 
-    allow := limiter.RateLimiter(limiter.UseRedis(redisPool), limiter.BucketLimit(1000*time.Millisecond, 10), limiter.FloodThreshold(5))
+    allow := limiter.RateLimiter(limiter.UseRedis(redisPool), limiter.BucketLimit(1000*time.Millisecond, 10), limiter.FloodThreshold(5))()
+
+## More
+
+more usage can see [UnitTest](https://github.com/lysu/go-rate-limiter/blob/master/ratelimite_test.go)
