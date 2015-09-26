@@ -27,8 +27,8 @@ type Allow func(key string) bool
 // CreateLimiter use to create new limiter
 type CreateLimiter func() Allow
 
-// LimiterConfig use to config redis limiter
-type LimiterConfig struct {
+// limiterConfig use to config redis limiter
+type limiterConfig struct {
 	LimiterType    LimiterType
 	FloodThreshold int
 	Interval       time.Duration
@@ -37,21 +37,21 @@ type LimiterConfig struct {
 	RedisPool      *redis.Pool
 }
 
-func defaultConfig() LimiterConfig {
-	return LimiterConfig{Interval: 1000 * time.Millisecond}
+func defaultConfig() limiterConfig {
+	return limiterConfig{Interval: 1000 * time.Millisecond}
 }
 
 // UseMemory option control use memory base limiter
-func UseMemory() func(config *LimiterConfig) {
-	return func(config *LimiterConfig) {
+func UseMemory() func(config *limiterConfig) {
+	return func(config *limiterConfig) {
 		config.LimiterType = Memory
 	}
 }
 
 // UseRedis option control use redis base limiter
 // redisPool supply redis config now we use redigo
-func UseRedis(redisPool *redis.Pool) func(config *LimiterConfig) {
-	return func(config *LimiterConfig) {
+func UseRedis(redisPool *redis.Pool) func(config *limiterConfig) {
+	return func(config *limiterConfig) {
 		config.LimiterType = Redis
 		config.RedisPool = redisPool
 	}
@@ -60,29 +60,29 @@ func UseRedis(redisPool *redis.Pool) func(config *LimiterConfig) {
 // FloodThreshold protect backend when flood-like request came
 // The rate limiter will still add the request to backend storage even if the requests are too many.
 // It may consume too much memory in backend storage, so this option for it
-func FloodThreshold(floodThreshold int) func(config *LimiterConfig) {
-	return func(config *LimiterConfig) {
+func FloodThreshold(floodThreshold int) func(config *limiterConfig) {
+	return func(config *limiterConfig) {
 		config.FloodThreshold = floodThreshold
 	}
 }
 
 // MinPeriod control the min period between two requests
-func MinPeriod(minPeriod time.Duration) func(config *LimiterConfig) {
-	return func(config *LimiterConfig) {
+func MinPeriod(minPeriod time.Duration) func(config *limiterConfig) {
+	return func(config *limiterConfig) {
 		config.MinPeriod = minPeriod
 	}
 }
 
 // BucketLimit control use BucketToken limit logic
-func BucketLimit(interval time.Duration, maxInInterval int) func(config *LimiterConfig) {
-	return func(config *LimiterConfig) {
+func BucketLimit(interval time.Duration, maxInInterval int) func(config *limiterConfig) {
+	return func(config *limiterConfig) {
 		config.Interval = interval
 		config.MaxInInterval = maxInInterval
 	}
 }
 
 // RateLimiter is use-entry of RateLimiter
-func RateLimiter(optfs ...func(config *LimiterConfig)) CreateLimiter {
+func RateLimiter(optfs ...func(config *limiterConfig)) CreateLimiter {
 	cfg := defaultConfig()
 	for _, optf := range optfs {
 		optf(&cfg)
@@ -101,7 +101,7 @@ func RateLimiter(optfs ...func(config *LimiterConfig)) CreateLimiter {
 }
 
 // memoryLimiterCreate use to create a limiter base on memory
-func memoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
+func memoryLimiterCreate(cfg limiterConfig) CreateLimiter {
 	return func() Allow {
 		floodFlags := ttlcache.NewCache(cfg.Interval)
 		timeoutTimers := make(map[string]*time.Timer)
@@ -157,7 +157,7 @@ func memoryLimiterCreate(cfg LimiterConfig) CreateLimiter {
 }
 
 // redisLimiterCreate use to create limiter base on redis
-func redisLimiterCreate(cfg LimiterConfig) CreateLimiter {
+func redisLimiterCreate(cfg limiterConfig) CreateLimiter {
 	return func() Allow {
 		floodFlags := ttlcache.NewCache(cfg.Interval)
 		return func(id string) bool {
