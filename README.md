@@ -27,7 +27,7 @@ The `limiter.UseMemory()` let limiter use memory storge, `limiter.BucketLimit(1*
 In a cluster, you can choose use redis as backend storage, and we choose `redigo` as reids client
 
     var redisPool = &redis.Pool{
-      MaxIdle:     3,
+            MaxIdle:     3,
 	    IdleTimeout: 240 * time.Second,
 	    Dial: func() (redis.Conn, error) {
 		    c, err := redis.Dial("tcp", "127.0.0.1:6379")
